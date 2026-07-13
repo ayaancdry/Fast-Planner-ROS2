@@ -1,0 +1,107 @@
+<!--
+  ROS2 port of the ROS1 uav_simulator bring-up (fast_planner/plan_manage/launch/simulator.xml):
+  map_generator + so3_quadrotor_simulator + so3_control + so3_disturbance_generator +
+  odom_visualization + local_sensing_node (pcl_render_node). Provides the simulated
+  drone + depth sensing pipeline that kino_replan/topo_replan expect on
+  odometry_topic / camera_pose_topic / depth_topic / cloud_topic.
+-->
+<launch>
+  <arg name="init_x" default="-19.0"/>
+  <arg name="init_y" default="-0.0"/>
+  <arg name="init_z" default="1.0"/>
+  <arg name="obj_num" default="1"/>
+  <arg name="map_size_x_"/>
+  <arg name="map_size_y_"/>
+  <arg name="map_size_z_"/>
+  <arg name="c_num"/>
+  <arg name="p_num"/>
+  <arg name="odometry_topic"/>
+
+  <node pkg="map_generator" exec="random_forest" name="random_forest" output="screen">
+    <remap from="odometry" to="$(var odometry_topic)"/>
+    <param name="init_state_x" value="$(var init_x)"/>
+    <param name="init_state_y" value="$(var init_y)"/>
+    <param name="map.x_size" value="$(var map_size_x_)"/>
+    <param name="map.y_size" value="$(var map_size_y_)"/>
+    <param name="map.z_size" value="$(var map_size_z_)"/>
+    <param name="map.resolution" value="0.1"/>
+
+    <param name="map.obs_num" value="$(var p_num)"/>
+    <param name="ObstacleShape.lower_rad" value="0.5"/>
+    <param name="ObstacleShape.upper_rad" value="0.7"/>
+    <param name="ObstacleShape.lower_hei" value="0.0"/>
+    <param name="ObstacleShape.upper_hei" value="3.0"/>
+
+    <param name="map.circle_num" value="$(var c_num)"/>
+    <param name="ObstacleShape.radius_l" value="0.7"/>
+    <param name="ObstacleShape.radius_h" value="0.5"/>
+    <param name="ObstacleShape.z_l" value="0.7"/>
+    <param name="ObstacleShape.z_h" value="0.8"/>
+    <param name="ObstacleShape.theta" value="0.5"/>
+
+    <param name="sensing.radius" value="5.0"/>
+    <param name="sensing.rate" value="10.0"/>
+  </node>
+
+  <node pkg="so3_quadrotor_simulator" exec="quadrotor_simulator_so3" name="quadrotor_simulator_so3" output="screen">
+    <param name="rate.odom" value="200.0"/>
+    <param name="simulator.init_state_x" value="$(var init_x)"/>
+    <param name="simulator.init_state_y" value="$(var init_y)"/>
+    <param name="simulator.init_state_z" value="$(var init_z)"/>
+
+    <remap from="odom" to="/visual_slam/odom"/>
+    <remap from="cmd" to="so3_cmd"/>
+    <remap from="force_disturbance" to="force_disturbance"/>
+    <remap from="moment_disturbance" to="moment_disturbance"/>
+  </node>
+
+  <!-- so3_control is a composable node registered via rclcpp_components; this is
+       its standalone executable (ROS1's "nodelet standalone so3_control/SO3ControlNodelet"). -->
+  <node pkg="so3_control" exec="so3_control_node" name="so3_control" output="screen">
+    <remap from="odom" to="/state_ukf/odom"/>
+    <remap from="position_cmd" to="/planning/pos_cmd"/>
+    <remap from="motors" to="motors"/>
+    <remap from="corrections" to="corrections"/>
+    <remap from="so3_cmd" to="so3_cmd"/>
+    <param from="$(find-pkg-share so3_control)/config/gains_hummingbird.yaml"/>
+    <param from="$(find-pkg-share so3_control)/config/corrections_hummingbird.yaml"/>
+    <param name="mass" value="0.74"/>
+    <param name="use_external_yaw" value="false"/>
+    <param name="gains.rot.z" value="1.0"/>
+    <param name="gains.ang.z" value="0.1"/>
+  </node>
+
+  <node pkg="so3_disturbance_generator" exec="so3_disturbance_generator" name="so3_disturbance_generator" output="screen">
+    <remap from="odom" to="/visual_slam/odom"/>
+    <remap from="noisy_odom" to="/state_ukf/odom"/>
+    <remap from="correction" to="/visual_slam/correction"/>
+    <remap from="force_disturbance" to="force_disturbance"/>
+    <remap from="moment_disturbance" to="moment_disturbance"/>
+  </node>
+
+  <node pkg="odom_visualization" exec="odom_visualization" name="odom_visualization" output="screen">
+    <remap from="odom" to="/visual_slam/odom"/>
+    <param name="color.a" value="1.0"/>
+    <param name="color.r" value="0.0"/>
+    <param name="color.g" value="0.0"/>
+    <param name="color.b" value="1.0"/>
+    <param name="covariance_scale" value="100.0"/>
+    <param name="robot_scale" value="1.0"/>
+  </node>
+
+  <!-- Simplified CPU point-cloud path only (the CUDA depth-render path from ROS1
+       was never built even upstream and hasn't been ported); camera.yaml intrinsics
+       are therefore not consumed here. -->
+  <node pkg="local_sensing_node" exec="pcl_render_node" name="pcl_render_node" output="screen">
+    <param name="sensing_horizon" value="5.0"/>
+    <param name="sensing_rate" value="30.0"/>
+    <param name="estimation_rate" value="30.0"/>
+
+    <param name="map.x_size" value="$(var map_size_x_)"/>
+    <param name="map.y_size" value="$(var map_size_y_)"/>
+    <param name="map.z_size" value="$(var map_size_z_)"/>
+
+    <remap from="global_map" to="/map_generator/global_cloud"/>
+    <remap from="odometry" to="$(var odometry_topic)"/>
+  </node>
+</launch>

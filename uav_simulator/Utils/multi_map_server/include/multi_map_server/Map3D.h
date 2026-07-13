@@ -2,10 +2,9 @@
 #define MAP3D_H
 
 #include <iostream>
-#include <ros/ros.h>
-#include <tf/tf.h>
+#include <rclcpp/rclcpp.hpp>
 #include <armadillo>
-#include <multi_map_server/SparseMap3D.h>
+#include <multi_map_server/msg/sparse_map3_d.hpp>
 
 using namespace std;
 
@@ -54,7 +53,7 @@ public:
 
   ~OccupancyGridList() { }
 
-  void PackMsg(multi_map_server::VerticalOccupancyGridList &msg)
+  void PackMsg(multi_map_server::msg::VerticalOccupancyGridList &msg)
   {
     msg.x = x;
     msg.y = y;
@@ -66,7 +65,7 @@ public:
     }
   }
 
-  void UnpackMsg(const multi_map_server::VerticalOccupancyGridList &msg)
+  void UnpackMsg(const multi_map_server::msg::VerticalOccupancyGridList &msg)
   {
     x = msg.x;
     y = msg.y;
@@ -91,9 +90,9 @@ public:
 
   inline int GetUpdateCounter() { return updateCounter; }
 
-  inline void SetUpdateCounterXY(int _updateCounter, double _x, double _y) 
-  { 
-    updateCounter = _updateCounter; 
+  inline void SetUpdateCounterXY(int _updateCounter, double _x, double _y)
+  {
+    updateCounter = _updateCounter;
     x = _x;
     y = _y;
   }
@@ -117,8 +116,8 @@ public:
       }
     }
     return;
-  } 
-  
+  }
+
   inline void SetOccupancyValue(int mz, int value)
   {
     OccupancyGrid grid;
@@ -193,7 +192,7 @@ public:
             grids.insert(j, grid);
             return;
           }
-        } 
+        }
       }
     }
   }
@@ -226,16 +225,16 @@ public:
     lend--;
     for (list<pair<int, int> >::iterator k = lp.begin(); k != lp.end(); k++)
     {
-      if (k->second > 0) 
-      { 
+      if (k->second > 0)
+      {
         if (upperCnt == 0) currUpper = k->first;
-        currMass = (k->second > currMass)?k->second:currMass; 
-        upperCnt++; 
+        currMass = (k->second > currMass)?k->second:currMass;
+        upperCnt++;
       }
-      if (k->second < 0) 
-      { 
+      if (k->second < 0)
+      {
         currLower = k->first;
-        lowerCnt++; 
+        lowerCnt++;
       }
       if (lowerCnt == upperCnt && k != lend)
       {
@@ -268,11 +267,11 @@ private:
 
   struct ComparePair
   {
-    bool operator()(pair<int, int> p1, pair<int, int> p2) 
-    { 
-      if (p1.first != p2.first) 
+    bool operator()(pair<int, int> p1, pair<int, int> p2)
+    {
+      if (p1.first != p2.first)
         return (p1.first > p2.first);
-      else 
+      else
         return (p1.second > p2.second);
     }
   };
@@ -292,7 +291,7 @@ class Map3D
 {
 public:
 
-  Map3D() 
+  Map3D()
   {
     resolution = 0.1;
     decayInterval = -1;
@@ -314,7 +313,7 @@ public:
     logOddFreeThr = log(1.0/(1.0-PROB_FREE_THRESHOLD) - 1.0) * LOG_ODD_SCALE_FACTOR;
     logOddFreeFixedThr = log(1.0/(1.0-PROB_FREE_FIXED_THRESHOLD) - 1.0) * LOG_ODD_SCALE_FACTOR;
   }
-  
+
   Map3D(const Map3D& _map3d)
   {
     resolution = _map3d.resolution;
@@ -342,39 +341,42 @@ public:
     logOddOccupiedThr = log(1.0/(1.0-PROB_OCCUPIED_THRESHOLD) - 1.0) * LOG_ODD_SCALE_FACTOR;
     logOddOccupiedFixedThr = log(1.0/(1.0-PROB_OCCUPIED_FIXED_THRESHOLD) - 1.0) * LOG_ODD_SCALE_FACTOR;
     logOddFreeThr = log(1.0/(1.0-PROB_FREE_THRESHOLD) - 1.0) * LOG_ODD_SCALE_FACTOR;
-    logOddFreeFixedThr = log(1.0/(1.0-PROB_FREE_FIXED_THRESHOLD) - 1.0) * LOG_ODD_SCALE_FACTOR;    
+    logOddFreeFixedThr = log(1.0/(1.0-PROB_FREE_FIXED_THRESHOLD) - 1.0) * LOG_ODD_SCALE_FACTOR;
   }
 
-  ~Map3D() 
+  ~Map3D()
   {
     for (unsigned int k = 0; k < mapBase.size(); k++)
     {
       if (mapBase[k])
       {
-        delete mapBase[k];    
+        delete mapBase[k];
         mapBase[k] = NULL;
       }
     }
   }
 
-  void PackMsg(multi_map_server::SparseMap3D &msg)
+  void PackMsg(multi_map_server::msg::SparseMap3D &msg)
   {
     // Basic map info
-    msg.header.stamp            = ros::Time::now();
+    msg.header.stamp            = rclcpp::Clock().now();
     msg.header.frame_id         = string("/map");
-    msg.info.map_load_time      = ros::Time::now();
+    msg.info.map_load_time      = rclcpp::Clock().now();
     msg.info.resolution         = resolution;
     msg.info.origin.position.x  = originX;
     msg.info.origin.position.y  = originY;
     msg.info.origin.position.z  = originZ;
     msg.info.width              = mapX;
     msg.info.height             = mapY;
-    msg.info.origin.orientation = tf::createQuaternionMsgFromYaw(0.0);  
+    msg.info.origin.orientation.x = 0.0;
+    msg.info.origin.orientation.y = 0.0;
+    msg.info.origin.orientation.z = 0.0;
+    msg.info.origin.orientation.w = 1.0;
     // Pack columns into message
     msg.lists.clear();
     for (unsigned int k = 0; k < updateList.size(); k++)
     {
-      multi_map_server::VerticalOccupancyGridList c;
+      multi_map_server::msg::VerticalOccupancyGridList c;
       updateList[k]->PackMsg(c);
       msg.lists.push_back(c);
     }
@@ -382,7 +384,7 @@ public:
     updateCounter++;
   }
 
-  void UnpackMsg(const multi_map_server::SparseMap3D &msg)
+  void UnpackMsg(const multi_map_server::msg::SparseMap3D &msg)
   {
     // Unpack column msgs, Replace the whole column
     for (unsigned int k = 0; k < msg.lists.size(); k++)
@@ -409,13 +411,13 @@ public:
     int mx, my, mz;
     WorldFrameToMapFrame(x, y, z, mx, my, mz);
     ResizeMapBase(mx, my);
-    if (!mapBase[my*mapX+mx]) 
+    if (!mapBase[my*mapX+mx])
       mapBase[my*mapX+mx] = new OccupancyGridList;
     mapBase[my*mapX+mx]->SetOccupancyValue(mz, value);
     // Also record the column that have been changed in another list, for publish incremental map
     if (mapBase[my*mapX+mx]->GetUpdateCounter() != updateCounter)
     {
-      updateList.push_back(mapBase[my*mapX+mx]); 
+      updateList.push_back(mapBase[my*mapX+mx]);
       mapBase[my*mapX+mx]->SetUpdateCounterXY(updateCounter, x, y);
     }
     updated = true;
@@ -435,7 +437,7 @@ public:
         return 1;
       else if (mapBase[my*mapX+mx]->GetOccupancyValue(mz) < logOddFreeThr)
         return -1;
-      else 
+      else
         return 0;
     }
   }
@@ -463,7 +465,7 @@ public:
           mapBase[my*mapX+mx]->GetOccupancyGrids(grids);
           for (unsigned int k = 0; k < grids.size(); k++)
           {
-            if  ( (grids[k].mass / (grids[k].upper - grids[k].lower + 1) > logOddOccupiedThr && type == OCCUPIED) || 
+            if  ( (grids[k].mass / (grids[k].upper - grids[k].lower + 1) > logOddOccupiedThr && type == OCCUPIED) ||
                   (grids[k].mass / (grids[k].upper - grids[k].lower + 1) < logOddFreeThr     && type == FREE) )
             {
               for (int mz = grids[k].lower; mz <= grids[k].upper; mz++)
@@ -485,17 +487,17 @@ public:
   }
 
   // Do not allow setting parameters if at least one update received
-  void SetResolution(double _resolution) 
+  void SetResolution(double _resolution)
   {
     if (!updated)
       resolution = _resolution;
   }
-  
-  void SetDecayInterval(double _decayInterval) 
+
+  void SetDecayInterval(double _decayInterval)
   {
     if (!updated && _decayInterval > 0)
       decayInterval = _decayInterval;
-  }  
+  }
 
   inline double GetResolution() { return resolution; }
   inline double GetMaxX() { return originX + mapX*resolution; }
@@ -544,11 +546,11 @@ private:
       while(mx >= mapX)
       {
         mapX    += expandStep;
-      } 
+      }
       while(my >= mapY)
       {
         mapY    += expandStep;
-      } 
+      }
       vector<OccupancyGridList*> _mapBase = mapBase;
       mapBase.clear();
       mapBase.resize(mapX*mapY,NULL);
@@ -569,9 +571,9 @@ private:
     if (decayInterval < 0)
       return;
     // Check whether to decay
-    static ros::Time prevDecayT = ros::Time::now();
-    ros::Time t = ros::Time::now();
-    double dt = (t - prevDecayT).toSec();
+    static rclcpp::Time prevDecayT = rclcpp::Clock().now();
+    rclcpp::Time t = rclcpp::Clock().now();
+    double dt = (t - prevDecayT).seconds();
     if (dt > decayInterval)
     {
       double r = pow(LOG_ODD_DECAY_RATE, dt);

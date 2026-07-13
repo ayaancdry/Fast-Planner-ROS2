@@ -1,4 +1,4 @@
-Header header
+std_msgs/Header header
 
 # the trajectory id, starts from "1".
 uint32 trajectory_id
@@ -21,8 +21,8 @@ float64 final_yaw
 # the initial and final state
 float64[6] s0
 float64[3] ut
- 
-float64[6] sf 
+
+float64[6] sf
 
 # the optimal arrival time
 float64 t_f

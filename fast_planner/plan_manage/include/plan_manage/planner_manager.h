@@ -1,50 +1,30 @@
-/**
-* This file is part of Fast-Planner.
-*
-* Copyright 2019 Boyu Zhou, Aerial Robotics Group, Hong Kong University of Science and Technology, <uav.ust.hk>
-* Developed by Boyu Zhou <bzhouai at connect dot ust dot hk>, <uv dot boyuzhou at gmail dot com>
-* for more information see <https://github.com/HKUST-Aerial-Robotics/Fast-Planner>.
-* If you use this code, please cite the respective publications as
-* listed on the above website.
-*
-* Fast-Planner is free software: you can redistribute it and/or modify
-* it under the terms of the GNU Lesser General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* Fast-Planner is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU Lesser General Public License
-* along with Fast-Planner. If not, see <http://www.gnu.org/licenses/>.
-*/
-
-
-
 #ifndef _PLANNER_MANAGER_H_
 #define _PLANNER_MANAGER_H_
 
-#include <bspline_opt/bspline_optimizer.h>
+
 #include <bspline/non_uniform_bspline.h>
 
 #include <path_searching/astar.h>
 #include <path_searching/kinodynamic_astar.h>
-#include <path_searching/topo_prm.h>
+#include <path_searching/topo_prm.hpp>
 
-#include <plan_env/edt_environment.h>
+#include <plan_env/edt_environment.hpp>
 
 #include <plan_manage/plan_container.hpp>
 
-#include <ros/ros.h>
+#include "rclcpp/rclcpp.hpp"
+#include <fast_planner/fast_planner.h>
+#include <bspline_opt/bspline_optimizer.h>
+#include "std_msgs/msg/bool.hpp"
+
+class FastPlanner;
 
 namespace fast_planner {
 
 // Fast Planner Manager
 // Key algorithms of mapping and planning are called
 
-class FastPlannerManager {
+class FastPlannerManager  {
   // SECTION stable
 public:
   FastPlannerManager();
@@ -58,8 +38,8 @@ public:
 
   void planYaw(const Eigen::Vector3d& start_yaw);
 
-  void initPlanModules(ros::NodeHandle& nh);
-  void setGlobalWaypoints(vector<Eigen::Vector3d>& waypoints);
+  void initPlanModules(std::shared_ptr<FastPlanner> nh);
+  void setGlobalWaypoints(std::vector<Eigen::Vector3d>& waypoints);
 
   bool checkTrajCollision(double& distance);
 
@@ -72,7 +52,7 @@ public:
 private:
   /* main planning algorithms & modules */
   SDFMap::Ptr sdf_map_;
-
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pos_cmd_flag_pub;
   unique_ptr<Astar> geo_path_finder_;
   unique_ptr<KinodynamicAstar> kino_path_finder_;
   unique_ptr<TopologyPRM> topo_prm_;

@@ -1,68 +1,48 @@
-/**
-* This file is part of Fast-Planner.
-*
-* Copyright 2019 Boyu Zhou, Aerial Robotics Group, Hong Kong University of Science and Technology, <uav.ust.hk>
-* Developed by Boyu Zhou <bzhouai at connect dot ust dot hk>, <uv dot boyuzhou at gmail dot com>
-* for more information see <https://github.com/HKUST-Aerial-Robotics/Fast-Planner>.
-* If you use this code, please cite the respective publications as
-* listed on the above website.
-*
-* Fast-Planner is free software: you can redistribute it and/or modify
-* it under the terms of the GNU Lesser General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* Fast-Planner is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU Lesser General Public License
-* along with Fast-Planner. If not, see <http://www.gnu.org/licenses/>.
-*/
-
-
-
-#include <plan_env/obj_predictor.h>
+#include "plan_env/obj_predictor.hpp"
+#include <memory>
 #include <string>
+#include <vector>
+#include "rclcpp/rclcpp.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "visualization_msgs/msg/marker.hpp"
 
 namespace fast_planner {
+
 /* ============================== obj history_ ============================== */
 
 int ObjHistory::queue_size_;
 int ObjHistory::skip_num_;
-ros::Time ObjHistory::global_start_time_;
-
+rclcpp::Time ObjHistory::global_start_time_;
 void ObjHistory::init(int id) {
   clear();
   skip_ = 0;
   obj_idx_ = id;
 }
 
-void ObjHistory::poseCallback(const geometry_msgs::PoseStampedConstPtr& msg) {
+void ObjHistory::poseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
   ++skip_;
   if (skip_ < ObjHistory::skip_num_) return;
 
   Eigen::Vector4d pos_t;
   pos_t(0) = msg->pose.position.x, pos_t(1) = msg->pose.position.y, pos_t(2) = msg->pose.position.z;
-  pos_t(3) = (ros::Time::now() - ObjHistory::global_start_time_).toSec();
+  pos_t(3) = (rclcpp::Clock().now() - ObjHistory::global_start_time_).seconds();
 
   history_.push_back(pos_t);
-  // cout << "idx: " << obj_idx_ << "pos_t: " << pos_t.transpose() << endl;
+  int h1 = history_.size();
+  double h2 = (double) h1;
 
-  if (history_.size() > queue_size_) history_.pop_front();
+  if (h2 > queue_size_) history_.pop_front();
 
   skip_ = 0;
 }
 
-// ObjHistory::
-/* ============================== obj predictor ==============================
- */
+/* ============================== obj predictor ============================== */
+
 ObjPredictor::ObjPredictor(/* args */) {
 }
 
-ObjPredictor::ObjPredictor(ros::NodeHandle& node) {
-  this->node_handle_ = node;
+ObjPredictor::ObjPredictor(rclcpp::Node::SharedPtr node) {
+  node_handle_ = node;
 }
 
 ObjPredictor::~ObjPredictor() {
@@ -70,50 +50,55 @@ ObjPredictor::~ObjPredictor() {
 
 void ObjPredictor::init() {
   /* get param */
-  node_handle_.param("prediction/obj_num", obj_num_, 5);
-  node_handle_.param("prediction/lambda", lambda_, 1.0);
-  node_handle_.param("prediction/predict_rate", predict_rate_, 1.0);
+  node_handle_->declare_parameter("prediction/obj_num", obj_num_);
+  node_handle_->declare_parameter("prediction/lambda", lambda_);
+  node_handle_->declare_parameter("prediction/predict_rate", predict_rate_);
 
-  predict_trajs_.reset(new vector<PolynomialPrediction>);
-  predict_trajs_->resize(obj_num_);
+  node_handle_->get_parameter("prediction/obj_num", obj_num_);
+  node_handle_->get_parameter("prediction/lambda", lambda_);
+  node_handle_->get_parameter("prediction/predict_rate", predict_rate_);
 
-  obj_scale_.reset(new vector<Eigen::Vector3d>);
-  obj_scale_->resize(obj_num_);
+  predict_trajs_ = std::make_shared<std::vector<PolynomialPrediction>>(obj_num_);
+
+  obj_scale_ = std::make_shared<std::vector<Eigen::Vector3d>>(obj_num_);
   scale_init_.resize(obj_num_);
   for (int i = 0; i < obj_num_; i++)
     scale_init_[i] = false;
 
   /* subscribe to pose */
   for (int i = 0; i < obj_num_; i++) {
-    shared_ptr<ObjHistory> obj_his(new ObjHistory);
-
+    auto obj_his = std::make_shared<ObjHistory>();
     obj_his->init(i);
     obj_histories_.push_back(obj_his);
 
-    ros::Subscriber pose_sub = node_handle_.subscribe<geometry_msgs::PoseStamped>(
-        "/dynamic/pose_" + std::to_string(i), 10, &ObjHistory::poseCallback, obj_his.get());
+    auto pose_sub = node_handle_->create_subscription<geometry_msgs::msg::PoseStamped>(
+        "/dynamic/pose_" + std::to_string(i), 10, [this, i](geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+          obj_histories_[i]->poseCallback(msg);
+        });
 
     pose_subs_.push_back(pose_sub);
   }
 
-  marker_sub_ = node_handle_.subscribe<visualization_msgs::Marker>("/dynamic/obj", 10,
-                                                                   &ObjPredictor::markerCallback, this);
+  marker_sub_ = node_handle_->create_subscription<visualization_msgs::msg::Marker>(
+      "/dynamic/obj", 10, [this](visualization_msgs::msg::Marker::SharedPtr msg) {
+        markerCallback(msg);
+      });
 
   /* update prediction */
-  predict_timer_ =
-      node_handle_.createTimer(ros::Duration(1 / predict_rate_), &ObjPredictor::predictCallback, this);
+  predict_timer_ = node_handle_->create_wall_timer(
+      std::chrono::milliseconds(static_cast<int>(1000.0 / predict_rate_)), [this]() { predictCallback(); });
 }
 
 ObjPrediction ObjPredictor::getPredictionTraj() {
-  return this->predict_trajs_;
+  return predict_trajs_;
 }
 
 ObjScale ObjPredictor::getObjScale() {
-  return this->obj_scale_;
+  return obj_scale_;
 }
 
 void ObjPredictor::predictPolyFit() {
-  /* iterate all obj */
+  // Implement polynomial prediction
   for (int i = 0; i < obj_num_; i++) {
     /* ---------- write A and b ---------- */
     Eigen::Matrix<double, 6, 6> A;
@@ -173,12 +158,12 @@ void ObjPredictor::predictPolyFit() {
   }
 }
 
-void ObjPredictor::predictCallback(const ros::TimerEvent& e) {
+void ObjPredictor::predictCallback() {
   // predictPolyFit();
   predictConstVel();
 }
 
-void ObjPredictor::markerCallback(const visualization_msgs::MarkerConstPtr& msg) {
+void ObjPredictor::markerCallback(const visualization_msgs::msg::Marker::SharedPtr &msg) {
   int idx = msg->id;
   (*obj_scale_)[idx](0) = msg->scale.x;
   (*obj_scale_)[idx](1) = msg->scale.y;
@@ -192,21 +177,16 @@ void ObjPredictor::markerCallback(const visualization_msgs::MarkerConstPtr& msg)
   }
 
   if (finish_num == obj_num_) {
-    marker_sub_.shutdown();
+    marker_sub_.reset();
   }
 }
 
 void ObjPredictor::predictConstVel() {
   for (int i = 0; i < obj_num_; i++) {
     /* ---------- get the last two point ---------- */
-    list<Eigen::Vector4d> his;
+    std::list<Eigen::Vector4d> his;
     obj_histories_[i]->getHistory(his);
-    list<Eigen::Vector4d>::iterator list_it = his.end();
-
-    /* ---------- test iteration ---------- */
-    // cout << "----------------------------" << endl;
-    // for (auto v4d : his)
-    //   cout << "v4d: " << v4d.transpose() << endl;
+    std::list<Eigen::Vector4d>::iterator list_it = his.end();
 
     Eigen::Vector3d q1, q2;
     double t1, t2;
@@ -228,7 +208,7 @@ void ObjPredictor::predictConstVel() {
 
     p01 = At12.inverse() * q12;
 
-    vector<Eigen::Matrix<double, 6, 1>> polys(3);
+    std::vector<Eigen::Matrix<double, 6, 1>> polys(3);
     for (int j = 0; j < 3; ++j) {
       polys[j].setZero();
       polys[j].head(2) = p01.col(j);
@@ -239,5 +219,4 @@ void ObjPredictor::predictConstVel() {
   }
 }
 
-// ObjPredictor::
 }  // namespace fast_planner

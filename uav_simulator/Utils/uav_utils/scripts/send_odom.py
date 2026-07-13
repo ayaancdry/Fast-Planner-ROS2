@@ -1,42 +1,43 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-import rospy
-import numpy as np
-import tf
-from tf import transformations as tfs
+import rclpy
+from rclpy.node import Node
+from rclpy.duration import Duration
+import tf_transformations as tfs
 from nav_msgs.msg import Odometry
 
-if __name__ == "__main__":
-	rospy.init_node("odom_sender")
 
-	msg = Odometry()
+class OdomSender(Node):
 
-	msg.header.stamp = rospy.Time.now()-rospy.Duration(0.2)
-	msg.header.frame_id = "world"
+    def __init__(self):
+        super().__init__('odom_sender')
+        self.pub = self.create_publisher(Odometry, 'odom', 10)
+        self.counter = 0
 
-	q = tfs.quaternion_from_euler(0,0,0,"rzyx")
+        self.msg = Odometry()
+        self.msg.header.frame_id = 'world'
+        q = tfs.quaternion_from_euler(0, 0, 0, 'rzyx')
+        self.msg.pose.pose.orientation.x = q[0]
+        self.msg.pose.pose.orientation.y = q[1]
+        self.msg.pose.pose.orientation.z = q[2]
+        self.msg.pose.pose.orientation.w = q[3]
 
-	msg.pose.pose.position.x = 0
-	msg.pose.pose.position.y = 0
-	msg.pose.pose.position.z = 0
-	msg.twist.twist.linear.x = 0
-	msg.twist.twist.linear.y = 0
-	msg.twist.twist.linear.z = 0
-	msg.pose.pose.orientation.x = q[0]
-	msg.pose.pose.orientation.y = q[1]
-	msg.pose.pose.orientation.z = q[2]
-	msg.pose.pose.orientation.w = q[3]
+        self.timer = self.create_timer(1.0, self.timer_callback)
 
-	print(msg)
+    def timer_callback(self):
+        self.counter += 1
+        self.msg.header.stamp = (self.get_clock().now() - Duration(seconds=0.2)).to_msg()
+        self.pub.publish(self.msg)
+        self.get_logger().info('Send %3d msg(s).' % self.counter)
 
-	pub = rospy.Publisher("odom", Odometry, queue_size=10)
-	
-	counter = 0
-	r = rospy.Rate(1)
 
-	while not rospy.is_shutdown():
-		counter += 1
-		msg.header.stamp = rospy.Time.now()-rospy.Duration(0.2)
-		pub.publish(msg)
-		rospy.loginfo("Send %3d msg(s)."%counter)
-		r.sleep()
+def main(args=None):
+    rclpy.init(args=args)
+    node = OdomSender()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

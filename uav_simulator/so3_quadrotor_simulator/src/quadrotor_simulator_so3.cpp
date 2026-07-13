@@ -1,9 +1,11 @@
+#include <cassert>
 #include <Eigen/Geometry>
-#include <nav_msgs/Odometry.h>
-#include <quadrotor_msgs/SO3Command.h>
+#include <geometry_msgs/msg/vector3.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+#include <quadrotor_msgs/msg/so3_command.hpp>
 #include <quadrotor_simulator/Quadrotor.h>
-#include <ros/ros.h>
-#include <sensor_msgs/Imu.h>
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/imu.hpp>
 #include <uav_utils/geometry_utils.h>
 
 typedef struct _Control
@@ -32,9 +34,9 @@ static Command     command;
 static Disturbance disturbance;
 
 void stateToOdomMsg(const QuadrotorSimulator::Quadrotor::State& state,
-                    nav_msgs::Odometry&                         odom);
+                    nav_msgs::msg::Odometry&                    odom);
 void quadToImuMsg(const QuadrotorSimulator::Quadrotor& quad,
-                  sensor_msgs::Imu&                    imu);
+                  sensor_msgs::msg::Imu&               imu);
 
 static Control
 getControl(const QuadrotorSimulator::Quadrotor& quad, const Command& cmd)
@@ -69,17 +71,7 @@ getControl(const QuadrotorSimulator::Quadrotor& quad, const Command& cmd)
   float R31 = R(2, 0);
   float R32 = R(2, 1);
   float R33 = R(2, 2);
-  /*
-    float R11 = state.R(0,0);
-    float R12 = state.R(0,1);
-    float R13 = state.R(0,2);
-    float R21 = state.R(1,0);
-    float R22 = state.R(1,1);
-    float R23 = state.R(1,2);
-    float R31 = state.R(2,0);
-    float R32 = state.R(2,1);
-    float R33 = state.R(2,2);
-  */
+
   float Om1 = state.omega(0);
   float Om2 = state.omega(1);
   float Om3 = state.omega(2);
@@ -122,23 +114,10 @@ getControl(const QuadrotorSimulator::Quadrotor& quad, const Command& cmd)
               Om1 * (I[2][0] * Om1 + I[2][1] * Om2 + I[2][2] * Om3);
   float in3 = Om1 * (I[1][0] * Om1 + I[1][1] * Om2 + I[1][2] * Om3) -
               Om2 * (I[0][0] * Om1 + I[0][1] * Om2 + I[0][2] * Om3);
-  /*
-    // Robust Control --------------------------------------------
-    float c2       = 0.6;
-    float epsilonR = 0.04;
-    float deltaR   = 0.1;
-    float eA1 = eOm1 + c2 * 1.0/I[0][0] * eR1;
-    float eA2 = eOm2 + c2 * 1.0/I[1][1] * eR2;
-    float eA3 = eOm3 + c2 * 1.0/I[2][2] * eR3;
-    float neA = sqrt(eA1*eA1 + eA2*eA2 + eA3*eA3);
-    float muR1 = -deltaR*deltaR * eA1 / (deltaR * neA + epsilonR);
-    float muR2 = -deltaR*deltaR * eA2 / (deltaR * neA + epsilonR);
-    float muR3 = -deltaR*deltaR * eA3 / (deltaR * neA + epsilonR);
-    // Robust Control --------------------------------------------
-  */
-  float M1 = -cmd.kR[0] * eR1 - cmd.kOm[0] * eOm1 + in1; // - I[0][0]*muR1;
-  float M2 = -cmd.kR[1] * eR2 - cmd.kOm[1] * eOm2 + in2; // - I[1][1]*muR2;
-  float M3 = -cmd.kR[2] * eR3 - cmd.kOm[2] * eOm3 + in3; // - I[2][2]*muR3;
+
+  float M1 = -cmd.kR[0] * eR1 - cmd.kOm[0] * eOm1 + in1;
+  float M2 = -cmd.kR[1] * eR2 - cmd.kOm[1] * eOm2 + in2;
+  float M3 = -cmd.kR[2] * eR3 - cmd.kOm[2] * eOm3 + in3;
 
   float w_sq[4];
   w_sq[0] = force / (4 * kf) - M2 / (2 * d * kf) + M3 / (4 * km);
@@ -158,7 +137,7 @@ getControl(const QuadrotorSimulator::Quadrotor& quad, const Command& cmd)
 }
 
 static void
-cmd_callback(const quadrotor_msgs::SO3Command::ConstPtr& cmd)
+cmd_callback(const quadrotor_msgs::msg::SO3Command::SharedPtr cmd)
 {
   command.force[0]         = cmd->force.x;
   command.force[1]         = cmd->force.y;
@@ -167,12 +146,12 @@ cmd_callback(const quadrotor_msgs::SO3Command::ConstPtr& cmd)
   command.qy               = cmd->orientation.y;
   command.qz               = cmd->orientation.z;
   command.qw               = cmd->orientation.w;
-  command.kR[0]            = cmd->kR[0];
-  command.kR[1]            = cmd->kR[1];
-  command.kR[2]            = cmd->kR[2];
-  command.kOm[0]           = cmd->kOm[0];
-  command.kOm[1]           = cmd->kOm[1];
-  command.kOm[2]           = cmd->kOm[2];
+  command.kR[0]            = cmd->k_r[0];
+  command.kR[1]            = cmd->k_r[1];
+  command.kR[2]            = cmd->k_r[2];
+  command.kOm[0]           = cmd->k_om[0];
+  command.kOm[1]           = cmd->k_om[1];
+  command.kOm[2]           = cmd->k_om[2];
   command.corrections[0]   = cmd->aux.kf_correction;
   command.corrections[1]   = cmd->aux.angle_corrections[0];
   command.corrections[2]   = cmd->aux.angle_corrections[1];
@@ -181,7 +160,7 @@ cmd_callback(const quadrotor_msgs::SO3Command::ConstPtr& cmd)
 }
 
 static void
-force_disturbance_callback(const geometry_msgs::Vector3::ConstPtr& f)
+force_disturbance_callback(const geometry_msgs::msg::Vector3::SharedPtr f)
 {
   disturbance.f(0) = f->x;
   disturbance.f(1) = f->y;
@@ -189,7 +168,7 @@ force_disturbance_callback(const geometry_msgs::Vector3::ConstPtr& f)
 }
 
 static void
-moment_disturbance_callback(const geometry_msgs::Vector3::ConstPtr& m)
+moment_disturbance_callback(const geometry_msgs::msg::Vector3::SharedPtr m)
 {
   disturbance.m(0) = m->x;
   disturbance.m(1) = m->y;
@@ -199,75 +178,55 @@ moment_disturbance_callback(const geometry_msgs::Vector3::ConstPtr& m)
 int
 main(int argc, char** argv)
 {
-  ros::init(argc, argv, "quadrotor_simulator_so3");
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<rclcpp::Node>("quadrotor_simulator_so3");
 
-  ros::NodeHandle n("~");
-
-  ros::Publisher  odom_pub = n.advertise<nav_msgs::Odometry>("odom", 100);
-  ros::Publisher  imu_pub  = n.advertise<sensor_msgs::Imu>("imu", 10);
-  ros::Subscriber cmd_sub =
-    n.subscribe("cmd", 100, &cmd_callback, ros::TransportHints().tcpNoDelay());
-  ros::Subscriber f_sub =
-    n.subscribe("force_disturbance", 100, &force_disturbance_callback,
-                ros::TransportHints().tcpNoDelay());
-  ros::Subscriber m_sub =
-    n.subscribe("moment_disturbance", 100, &moment_disturbance_callback,
-                ros::TransportHints().tcpNoDelay());
+  auto odom_pub = node->create_publisher<nav_msgs::msg::Odometry>("odom", 100);
+  auto imu_pub  = node->create_publisher<sensor_msgs::msg::Imu>("imu", 10);
+  // ROS1's ros::TransportHints().tcpNoDelay() has no direct ROS2 QoS
+  // equivalent; default QoS (reliable, depth as given) is used throughout.
+  auto cmd_sub = node->create_subscription<quadrotor_msgs::msg::SO3Command>(
+      "cmd", 100, &cmd_callback);
+  auto f_sub = node->create_subscription<geometry_msgs::msg::Vector3>(
+      "force_disturbance", 100, &force_disturbance_callback);
+  auto m_sub = node->create_subscription<geometry_msgs::msg::Vector3>(
+      "moment_disturbance", 100, &moment_disturbance_callback);
 
   QuadrotorSimulator::Quadrotor quad;
-  double                        _init_x, _init_y, _init_z;
-  n.param("simulator/init_state_x", _init_x, 0.0);
-  n.param("simulator/init_state_y", _init_y, 0.0);
-  n.param("simulator/init_state_z", _init_z, 1.0);
+  double _init_x = node->declare_parameter("simulator.init_state_x", 0.0);
+  double _init_y = node->declare_parameter("simulator.init_state_y", 0.0);
+  double _init_z = node->declare_parameter("simulator.init_state_z", 1.0);
 
   Eigen::Vector3d position = Eigen::Vector3d(_init_x, _init_y, _init_z);
   quad.setStatePos(position);
 
-  double simulation_rate;
-  n.param("rate/simulation", simulation_rate, 1000.0);
-  ROS_ASSERT(simulation_rate > 0);
+  double simulation_rate = node->declare_parameter("rate.simulation", 1000.0);
+  assert(simulation_rate > 0);
 
-  double odom_rate;
-  n.param("rate/odom", odom_rate, 100.0);
-  const ros::Duration odom_pub_duration(1 / odom_rate);
+  double odom_rate = node->declare_parameter("rate.odom", 100.0);
+  const rclcpp::Duration odom_pub_duration =
+      rclcpp::Duration::from_seconds(1 / odom_rate);
 
-  std::string quad_name;
-  n.param("quadrotor_name", quad_name, std::string("quadrotor"));
+  std::string quad_name = node->declare_parameter("quadrotor_name", std::string("quadrotor"));
 
   QuadrotorSimulator::Quadrotor::State state = quad.getState();
 
-  ros::Rate    r(simulation_rate);
+  rclcpp::Rate r(simulation_rate);
   const double dt = 1 / simulation_rate;
 
   Control control;
 
-  nav_msgs::Odometry odom_msg;
+  nav_msgs::msg::Odometry odom_msg;
   odom_msg.header.frame_id = "/simulator";
   odom_msg.child_frame_id  = "/" + quad_name;
 
-  sensor_msgs::Imu imu;
+  sensor_msgs::msg::Imu imu;
   imu.header.frame_id = "/simulator";
 
-  /*
-  command.force[0] = 0;
-  command.force[1] = 0;
-  command.force[2] = quad.getMass()*quad.getGravity() + 0.1;
-  command.qx = 0;
-  command.qy = 0;
-  command.qz = 0;
-  command.qw = 1;
-  command.kR[0] = 2;
-  command.kR[1] = 2;
-  command.kR[2] = 2;
-  command.kOm[0] = 0.15;
-  command.kOm[1] = 0.15;
-  command.kOm[2] = 0.15;
-  */
-
-  ros::Time next_odom_pub_time = ros::Time::now();
-  while (n.ok())
+  rclcpp::Time next_odom_pub_time = node->now();
+  while (rclcpp::ok())
   {
-    ros::spinOnce();
+    rclcpp::spin_some(node);
 
     auto last = control;
     control   = getControl(quad, command);
@@ -283,28 +242,29 @@ main(int argc, char** argv)
     quad.setExternalMoment(disturbance.m);
     quad.step(dt);
 
-    ros::Time tnow = ros::Time::now();
+    rclcpp::Time tnow = node->now();
 
     if (tnow >= next_odom_pub_time)
     {
-      next_odom_pub_time += odom_pub_duration;
+      next_odom_pub_time = next_odom_pub_time + odom_pub_duration;
       odom_msg.header.stamp = tnow;
       state                 = quad.getState();
       stateToOdomMsg(state, odom_msg);
       quadToImuMsg(quad, imu);
-      odom_pub.publish(odom_msg);
-      imu_pub.publish(imu);
+      odom_pub->publish(odom_msg);
+      imu_pub->publish(imu);
     }
 
     r.sleep();
   }
 
+  rclcpp::shutdown();
   return 0;
 }
 
 void
 stateToOdomMsg(const QuadrotorSimulator::Quadrotor::State& state,
-               nav_msgs::Odometry&                         odom)
+               nav_msgs::msg::Odometry&                    odom)
 {
   odom.pose.pose.position.x = state.x(0);
   odom.pose.pose.position.y = state.x(1);
@@ -326,7 +286,7 @@ stateToOdomMsg(const QuadrotorSimulator::Quadrotor::State& state,
 }
 
 void
-quadToImuMsg(const QuadrotorSimulator::Quadrotor& quad, sensor_msgs::Imu& imu)
+quadToImuMsg(const QuadrotorSimulator::Quadrotor& quad, sensor_msgs::msg::Imu& imu)
 
 {
   QuadrotorSimulator::Quadrotor::State state = quad.getState();

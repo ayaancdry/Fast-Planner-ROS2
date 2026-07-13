@@ -30,38 +30,47 @@
 #ifndef MULTI_PROB_MAP_DISPLAY_H
 #define MULTI_PROB_MAP_DISPLAY_H
 
-#include <OGRE/OgreMaterial.h>
-#include <OGRE/OgreTexture.h>
-#include <OGRE/OgreVector3.h>
+#include <rclcpp/rclcpp.hpp>
+#include <mutex>
 
-#include <nav_msgs/MapMetaData.h>
-#include <ros/time.h>
+#include <OgreMaterial.h>
+#include <OgreTexture.h>
+#include <OgreVector3.h>
 
-#include <multi_map_server/MultiOccupancyGrid.h>
-#include <nav_msgs/OccupancyGrid.h>
+#include <nav_msgs/msg/map_meta_data.hpp>
+#include <rclcpp/time.hpp>
 
-#include "rviz/display.h"
+#include <multi_map_server/msg/multi_occupancy_grid.hpp>
+#include <nav_msgs/msg/occupancy_grid.hpp>
+
+#include "rviz_common/display.hpp"
 
 namespace Ogre
 {
 class ManualObject;
 }
 
-namespace rviz
+namespace rviz_common
 {
-
+namespace properties
+{
 class FloatProperty;
 class IntProperty;
 class Property;
 class QuaternionProperty;
 class RosTopicProperty;
 class VectorProperty;
+}
+}
+
+namespace rviz_plugins
+{
 
 /**
  * \class MultiProbMapDisplay
  * \brief Displays a map along the XY plane.
  */
-class MultiProbMapDisplay : public Display
+class MultiProbMapDisplay : public rviz_common::Display
 {
   Q_OBJECT
 public:
@@ -85,7 +94,7 @@ protected:
   virtual void subscribe();
   virtual void unsubscribe();
 
-  void incomingMap(const multi_map_server::MultiOccupancyGrid::ConstPtr& msg);
+  void incomingMap(const multi_map_server::msg::MultiOccupancyGrid::ConstSharedPtr msg);
 
   void clear();
 
@@ -97,17 +106,17 @@ protected:
 
   std::string topic_;
 
-  ros::Subscriber map_sub_;
+  rclcpp::Subscription<multi_map_server::msg::MultiOccupancyGrid>::SharedPtr map_sub_;
 
-  RosTopicProperty* topic_property_;
-  Property*         draw_under_property_;
+  rviz_common::properties::RosTopicProperty* topic_property_;
+  rviz_common::properties::Property*         draw_under_property_;
 
-  multi_map_server::MultiOccupancyGrid::ConstPtr updated_map_;
-  multi_map_server::MultiOccupancyGrid::ConstPtr current_map_;
-  boost::mutex                                   mutex_;
-  bool                                           new_map_;
+  multi_map_server::msg::MultiOccupancyGrid::ConstSharedPtr updated_map_;
+  multi_map_server::msg::MultiOccupancyGrid::ConstSharedPtr current_map_;
+  std::mutex                                                mutex_;
+  bool                                                       new_map_;
 };
 
-} // namespace rviz
+} // namespace rviz_plugins
 
 #endif

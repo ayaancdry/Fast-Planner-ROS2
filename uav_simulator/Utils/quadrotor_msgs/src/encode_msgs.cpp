@@ -1,10 +1,11 @@
 #include "quadrotor_msgs/encode_msgs.h"
 #include <quadrotor_msgs/comm_types.h>
+#include <cstring>
 
 namespace quadrotor_msgs
 {
 
-void encodeSO3Command(const quadrotor_msgs::SO3Command &so3_command,
+void encodeSO3Command(const quadrotor_msgs::msg::SO3Command &so3_command,
                       std::vector<uint8_t> &output)
 {
   struct SO3_CMD_INPUT so3_cmd_input;
@@ -18,13 +19,13 @@ void encodeSO3Command(const quadrotor_msgs::SO3Command &so3_command,
   so3_cmd_input.des_qz = so3_command.orientation.z*125;
   so3_cmd_input.des_qw = so3_command.orientation.w*125;
 
-  so3_cmd_input.kR[0] = so3_command.kR[0]*50;
-  so3_cmd_input.kR[1] = so3_command.kR[1]*50;
-  so3_cmd_input.kR[2] = so3_command.kR[2]*50;
+  so3_cmd_input.kR[0] = so3_command.k_r[0]*50;
+  so3_cmd_input.kR[1] = so3_command.k_r[1]*50;
+  so3_cmd_input.kR[2] = so3_command.k_r[2]*50;
 
-  so3_cmd_input.kOm[0] = so3_command.kOm[0]*100;
-  so3_cmd_input.kOm[1] = so3_command.kOm[1]*100;
-  so3_cmd_input.kOm[2] = so3_command.kOm[2]*100;
+  so3_cmd_input.kOm[0] = so3_command.k_om[0]*100;
+  so3_cmd_input.kOm[1] = so3_command.k_om[1]*100;
+  so3_cmd_input.kOm[2] = so3_command.k_om[2]*100;
 
   so3_cmd_input.cur_yaw = so3_command.aux.current_yaw*1e4;
 
@@ -35,13 +36,16 @@ void encodeSO3Command(const quadrotor_msgs::SO3Command &so3_command,
   so3_cmd_input.enable_motors = so3_command.aux.enable_motors;
   so3_cmd_input.use_external_yaw = so3_command.aux.use_external_yaw;
 
-  so3_cmd_input.seq = so3_command.header.seq % 255;
+  // ROS2 std_msgs/Header dropped the seq field; keep an internal per-process counter
+  // so the wire format (which still carries a rolling seq byte) is unchanged.
+  static uint8_t seq_counter = 0;
+  so3_cmd_input.seq = seq_counter++;
 
   output.resize(sizeof(so3_cmd_input));
   memcpy(&output[0], &so3_cmd_input, sizeof(so3_cmd_input));
 }
 
-void encodeTRPYCommand(const quadrotor_msgs::TRPYCommand &trpy_command,
+void encodeTRPYCommand(const quadrotor_msgs::msg::TRPYCommand &trpy_command,
                         std::vector<uint8_t> &output)
 {
   struct TRPY_CMD trpy_cmd_input;
@@ -57,14 +61,14 @@ void encodeTRPYCommand(const quadrotor_msgs::TRPYCommand &trpy_command,
   memcpy(&output[0], &trpy_cmd_input, sizeof(trpy_cmd_input));
 }
 
-void encodePPRGains(const quadrotor_msgs::Gains &gains,
+void encodePPRGains(const quadrotor_msgs::msg::Gains &gains,
                     std::vector<uint8_t> &output)
 {
   struct PPR_GAINS ppr_gains;
-  ppr_gains.Kp = gains.Kp;
-  ppr_gains.Kd = gains.Kd;
-  ppr_gains.Kp_yaw = gains.Kp_yaw;
-  ppr_gains.Kd_yaw = gains.Kd_yaw;
+  ppr_gains.Kp = gains.kp;
+  ppr_gains.Kd = gains.kd;
+  ppr_gains.Kp_yaw = gains.kp_yaw;
+  ppr_gains.Kd_yaw = gains.kd_yaw;
 
   output.resize(sizeof(ppr_gains));
   memcpy(&output[0], &ppr_gains, sizeof(ppr_gains));

@@ -22,7 +22,6 @@
 */
 
 
-
 #ifndef _LINEAR_OBJ_MODEL_H_
 #define _LINEAR_OBJ_MODEL_H_
 

@@ -22,11 +22,10 @@
 */
 
 
-
 #ifndef RAYCAST_H_
 #define RAYCAST_H_
 
-#include <Eigen/Eigen>
+#include <Eigen/Core>
 #include <vector>
 
 double signum(double x);
@@ -86,3 +85,4 @@ public:
 };
 
 #endif  // RAYCAST_H_
+

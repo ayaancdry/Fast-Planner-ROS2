@@ -22,13 +22,14 @@
 */
 
 
-
 #ifndef _POLYNOMIAL_TRAJ_H
 #define _POLYNOMIAL_TRAJ_H
 
-#include <Eigen/Eigen>
+#include <Eigen/Eigen.h>
 #include <vector>
 
+using Eigen::VectorXd;
+using Eigen::Vector3d;
 using std::vector;
 
 class PolynomialTraj {
@@ -42,7 +43,7 @@ private:
   int num_seg;
 
   /* evaluation */
-  vector<Eigen::Vector3d> traj_vec3d;
+  vector<Vector3d> traj_vec3d;
   double length;
 
 public:
@@ -68,8 +69,8 @@ public:
     }
   }
 
-  Eigen::Vector3d evaluate(double t) {
-    /* detetrmine segment num */
+  Vector3d evaluate(double t) {
+    /* determine segment num */
     int idx = 0;
     while (times[idx] < t) {
       t -= times[idx];
@@ -78,19 +79,19 @@ public:
 
     /* evaluation */
     int order = cxs[idx].size();
-    Eigen::VectorXd cx(order), cy(order), cz(order), tv(order);
+    VectorXd cx(order), cy(order), cz(order), tv(order);
     for (int i = 0; i < order; ++i) {
       cx(i) = cxs[idx][i], cy(i) = cys[idx][i], cz(i) = czs[idx][i];
       tv(order - 1 - i) = std::pow(t, double(i));
     }
 
-    Eigen::Vector3d pt;
+    Vector3d pt;
     pt(0) = tv.dot(cx), pt(1) = tv.dot(cy), pt(2) = tv.dot(cz);
     return pt;
   }
 
-  Eigen::Vector3d evaluateVel(double t) {
-    /* detetrmine segment num */
+  Vector3d evaluateVel(double t) {
+    /* determine segment num */
     int idx = 0;
     while (times[idx] < t) {
       t -= times[idx];
@@ -99,7 +100,7 @@ public:
 
     /* evaluation */
     int order = cxs[idx].size();
-    Eigen::VectorXd vx(order - 1), vy(order - 1), vz(order - 1);
+    VectorXd vx(order - 1), vy(order - 1), vz(order - 1);
 
     /* coef of vel */
     for (int i = 0; i < order - 1; ++i) {
@@ -108,17 +109,17 @@ public:
       vz(i) = double(i + 1) * czs[idx][order - 2 - i];
     }
     double ts = t;
-    Eigen::VectorXd tv(order - 1);
+    VectorXd tv(order - 1);
     for (int i = 0; i < order - 1; ++i)
       tv(i) = pow(ts, i);
 
-    Eigen::Vector3d vel;
+    Vector3d vel;
     vel(0) = tv.dot(vx), vel(1) = tv.dot(vy), vel(2) = tv.dot(vz);
     return vel;
   }
 
-  Eigen::Vector3d evaluateAcc(double t) {
-    /* detetrmine segment num */
+  Vector3d evaluateAcc(double t) {
+    /* determine segment num */
     int idx = 0;
     while (times[idx] < t) {
       t -= times[idx];
@@ -127,7 +128,7 @@ public:
 
     /* evaluation */
     int order = cxs[idx].size();
-    Eigen::VectorXd ax(order - 2), ay(order - 2), az(order - 2);
+    VectorXd ax(order - 2), ay(order - 2), az(order - 2);
 
     /* coef of vel */
     for (int i = 0; i < order - 2; ++i) {
@@ -136,11 +137,11 @@ public:
       az(i) = double((i + 2) * (i + 1)) * czs[idx][order - 3 - i];
     }
     double ts = t;
-    Eigen::VectorXd tv(order - 2);
+    VectorXd tv(order - 2);
     for (int i = 0; i < order - 2; ++i)
       tv(i) = pow(ts, i);
 
-    Eigen::Vector3d acc;
+    Vector3d acc;
     acc(0) = tv.dot(ax), acc(1) = tv.dot(ay), acc(2) = tv.dot(az);
     return acc;
   }
@@ -150,11 +151,11 @@ public:
     return this->time_sum;
   }
 
-  vector<Eigen::Vector3d> getTraj() {
+  vector<Vector3d> getTraj() {
     double eval_t = 0.0;
     traj_vec3d.clear();
     while (eval_t < time_sum) {
-      Eigen::Vector3d pt = evaluate(eval_t);
+      Vector3d pt = evaluate(eval_t);
       traj_vec3d.push_back(pt);
       eval_t += 0.01;
     }
@@ -164,7 +165,7 @@ public:
   double getLength() {
     length = 0.0;
 
-    Eigen::Vector3d p_l = traj_vec3d[0], p_n;
+    Vector3d p_l = traj_vec3d[0], p_n;
     for (int i = 1; i < traj_vec3d.size(); ++i) {
       p_n = traj_vec3d[i];
       length += (p_n - p_l).norm();
@@ -182,7 +183,7 @@ public:
     int order = cxs[0].size();
 
     for (int s = 0; s < times.size(); ++s) {
-      Eigen::Vector3d um;
+      Vector3d um;
       um(0) = 2 * cxs[s][order - 3], um(1) = 2 * cys[s][order - 3], um(2) = 2 * czs[s][order - 3];
       cost += um.squaredNorm() * times[s];
     }
@@ -195,7 +196,7 @@ public:
 
     /* evaluate jerk */
     for (int s = 0; s < times.size(); ++s) {
-      Eigen::VectorXd cxv(cxs[s].size()), cyv(cys[s].size()), czv(czs[s].size());
+      VectorXd cxv(cxs[s].size()), cyv(cys[s].size()), czv(czs[s].size());
       /* convert coefficient */
       int order = cxs[s].size();
       for (int j = 0; j < order; ++j) {
@@ -204,12 +205,12 @@ public:
       double ts = times[s];
 
       /* jerk matrix */
-      Eigen::MatrixXd mat_jerk(order, order);
+      MatrixXd mat_jerk(order, order);
       mat_jerk.setZero();
-      for (double i = 3; i < order; i += 1)
-        for (double j = 3; j < order; j += 1) {
+      for (int i = 3; i < order; i += 1)
+        for (int j = 3; j < order; j += 1) {
           mat_jerk(i, j) =
-              i * (i - 1) * (i - 2) * j * (j - 1) * (j - 2) * pow(ts, i + j - 5) / (i + j - 5);
+              i * (i - 1) * (i - 2) * j * (j - 1) * (j - 2) * (double)(pow(ts, i + j - 5)) / (double)((i + j - 5));
         }
 
       jerk += (cxv.transpose() * mat_jerk * cxv)(0, 0);
@@ -225,7 +226,7 @@ public:
     mean_v = 0.0, max_v = -1.0;
     for (int s = 0; s < times.size(); ++s) {
       int order = cxs[s].size();
-      Eigen::VectorXd vx(order - 1), vy(order - 1), vz(order - 1);
+      VectorXd vx(order - 1), vy(order - 1), vz(order - 1);
 
       /* coef of vel */
       for (int i = 0; i < order - 1; ++i) {
@@ -237,10 +238,10 @@ public:
 
       double eval_t = 0.0;
       while (eval_t < ts) {
-        Eigen::VectorXd tv(order - 1);
+        VectorXd tv(order - 1);
         for (int i = 0; i < order - 1; ++i)
           tv(i) = pow(ts, i);
-        Eigen::Vector3d vel;
+        Vector3d vel;
         vel(0) = tv.dot(vx), vel(1) = tv.dot(vy), vel(2) = tv.dot(vz);
         double vn = vel.norm();
         mean_v += vn;
@@ -259,7 +260,7 @@ public:
     mean_a = 0.0, max_a = -1.0;
     for (int s = 0; s < times.size(); ++s) {
       int order = cxs[s].size();
-      Eigen::VectorXd ax(order - 2), ay(order - 2), az(order - 2);
+      VectorXd ax(order - 2), ay(order - 2), az(order - 2);
 
       /* coef of acc */
       for (int i = 0; i < order - 2; ++i) {
@@ -271,10 +272,10 @@ public:
 
       double eval_t = 0.0;
       while (eval_t < ts) {
-        Eigen::VectorXd tv(order - 2);
+        VectorXd tv(order - 2);
         for (int i = 0; i < order - 2; ++i)
           tv(i) = pow(ts, i);
-        Eigen::Vector3d acc;
+        Vector3d acc;
         acc(0) = tv.dot(ax), acc(1) = tv.dot(ay), acc(2) = tv.dot(az);
         double an = acc.norm();
         mean_a += an;

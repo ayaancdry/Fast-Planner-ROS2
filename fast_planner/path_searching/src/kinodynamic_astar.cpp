@@ -1,35 +1,15 @@
-/**
-* This file is part of Fast-Planner.
-*
-* Copyright 2019 Boyu Zhou, Aerial Robotics Group, Hong Kong University of Science and Technology, <uav.ust.hk>
-* Developed by Boyu Zhou <bzhouai at connect dot ust dot hk>, <uv dot boyuzhou at gmail dot com>
-* for more information see <https://github.com/HKUST-Aerial-Robotics/Fast-Planner>.
-* If you use this code, please cite the respective publications as
-* listed on the above website.
-*
-* Fast-Planner is free software: you can redistribute it and/or modify
-* it under the terms of the GNU Lesser General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* Fast-Planner is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU Lesser General Public License
-* along with Fast-Planner. If not, see <http://www.gnu.org/licenses/>.
-*/
-
 #include <path_searching/kinodynamic_astar.h>
 #include <sstream>
 #include <plan_env/sdf_map.h>
+// #include <rclcpp/logging.hpp>
+#include "rcutils/logging_macros.h"
 
 using namespace std;
 using namespace Eigen;
 
 namespace fast_planner
 {
+KinodynamicAstar::KinodynamicAstar() {}
 KinodynamicAstar::~KinodynamicAstar()
 {
   for (int i = 0; i < allocate_num_; i++)
@@ -45,7 +25,7 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
   start_acc_ = start_a;
 
   PathNodePtr cur_node = path_node_pool_[0];
-  cur_node->parent = NULL;
+  cur_node->parent = nullptr;
   cur_node->state.head(3) = start_pt;
   cur_node->state.tail(3) = start_v;
   cur_node->index = posToIndex(start_pt);
@@ -74,8 +54,8 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
   else
     expanded_nodes_.insert(cur_node->index, cur_node);
 
-  PathNodePtr neighbor = NULL;
-  PathNodePtr terminate_node = NULL;
+  PathNodePtr neighbor = nullptr;
+  PathNodePtr terminate_node = nullptr;
   bool init_search = init;
   const int tolerance = ceil(1 / resolution_);
 
@@ -99,7 +79,7 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
         estimateHeuristic(cur_node->state, end_state, time_to_goal);
         computeShotTraj(cur_node->state, end_state, time_to_goal);
         if (init_search)
-          ROS_ERROR("Shot in first search loop!");
+          RCUTILS_LOG_ERROR("error from kinodynamic_astar", "Shot in first search loop!");
       }
     }
     if (reach_horizon)
@@ -123,9 +103,9 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
         std::cout << "reach end" << std::endl;
         return REACH_END;
       }
-      else if (cur_node->parent != NULL)
+      else if (cur_node->parent != nullptr)
       {
-        std::cout << "near end" << std::endl;
+        // std::cout << "near end" << std::endl;
         return NEAR_END;
       }
       else
@@ -182,7 +162,7 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
         Eigen::Vector3i pro_id = posToIndex(pro_pos);
         int pro_t_id = timeToIndex(pro_t);
         PathNodePtr pro_node = dynamic ? expanded_nodes_.find(pro_id, pro_t_id) : expanded_nodes_.find(pro_id);
-        if (pro_node != NULL && pro_node->node_state == IN_CLOSE_SET)
+        if (pro_node != nullptr && pro_node->node_state == IN_CLOSE_SET)
         {
           if (init_search)
             std::cout << "close" << std::endl;
@@ -259,7 +239,7 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
         // This node end up in a voxel different from others
         if (!prune)
         {
-          if (pro_node == NULL)
+          if (pro_node == nullptr)
           {
             pro_node = path_node_pool_[use_node_num_];
             pro_node->index = pro_id;
@@ -320,25 +300,39 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
   cout << "iter num: " << iter_num_ << endl;
   return NO_PATH;
 }
-
-void KinodynamicAstar::setParam(ros::NodeHandle& nh)
+void KinodynamicAstar::setParam(std::shared_ptr<FastPlanner> nh)
 {
-  nh.param("search/max_tau", max_tau_, -1.0);
-  nh.param("search/init_max_tau", init_max_tau_, -1.0);
-  nh.param("search/max_vel", max_vel_, -1.0);
-  nh.param("search/max_acc", max_acc_, -1.0);
-  nh.param("search/w_time", w_time_, -1.0);
-  nh.param("search/horizon", horizon_, -1.0);
-  nh.param("search/resolution_astar", resolution_, -1.0);
-  nh.param("search/time_resolution", time_resolution_, -1.0);
-  nh.param("search/lambda_heu", lambda_heu_, -1.0);
-  nh.param("search/allocate_num", allocate_num_, -1);
-  nh.param("search/check_num", check_num_, -1);
-  nh.param("search/optimistic", optimistic_, true);
+  nh->declare_parameter<float>("search/max_tau", 0);
+  nh->declare_parameter<float>("search/init_max_tau", 0);
+  nh->declare_parameter<float>("search/max_vel", 0);
+  nh->declare_parameter<float>("search/max_acc", 0);
+  nh->declare_parameter<float>("search/w_time", 0);
+  nh->declare_parameter<float>("search/horizon", 0);
+  nh->declare_parameter<float>("search/lambda_heu", 0);
+  nh->declare_parameter<float>("search/resolution_astar", 0);
+  nh->declare_parameter<float>("search/time_resolution", 0);
+  nh->declare_parameter<float>("search/margin", 0);
+  nh->declare_parameter<int>("search/allocate_num", 0);
+  nh->declare_parameter<int>("search/check_num", 0);
+  nh->declare_parameter<bool>("search/optimistic", true);
+  nh->declare_parameter<float>("search/vel_margin", 0);
+
+  nh->get_parameter("search/max_tau", max_tau_);
+  nh->get_parameter("search/init_max_tau", init_max_tau_);
+  nh->get_parameter("search/max_vel", max_vel_);
+  nh->get_parameter("search/max_acc", max_acc_);
+  nh->get_parameter("search/w_time", w_time_);
+  nh->get_parameter("search/horizon", horizon_);
+  nh->get_parameter("search/resolution_astar", resolution_);
+  nh->get_parameter("search/time_resolution", time_resolution_);
+  nh->get_parameter("search/lambda_heu", lambda_heu_);
+  nh->get_parameter("search/allocate_num", allocate_num_);
+  nh->get_parameter("search/check_num", check_num_);
+  nh->get_parameter("search/optimistic", optimistic_);
   tie_breaker_ = 1.0 + 1.0 / 10000;
 
   double vel_margin;
-  nh.param("search/vel_margin", vel_margin, 0.0);
+  nh->get_parameter("search/vel_margin", vel_margin);
   max_vel_ += vel_margin;
 }
 
@@ -347,14 +341,15 @@ void KinodynamicAstar::retrievePath(PathNodePtr end_node)
   PathNodePtr cur_node = end_node;
   path_nodes_.push_back(cur_node);
 
-  while (cur_node->parent != NULL)
+  while (cur_node->parent != nullptr)
   {
     cur_node = cur_node->parent;
     path_nodes_.push_back(cur_node);
   }
 
-  reverse(path_nodes_.begin(), path_nodes_.end());
+  std::reverse(path_nodes_.begin(), path_nodes_.end());
 }
+
 double KinodynamicAstar::estimateHeuristic(Eigen::VectorXd x1, Eigen::VectorXd x2, double& optimal_time)
 {
   const Vector3d dp = x2.head(3) - x1.head(3);
@@ -780,5 +775,4 @@ void KinodynamicAstar::stateTransit(Eigen::Matrix<double, 6, 1>& state0, Eigen::
 
   state1 = phi_ * state0 + integral;
 }
-
-}  // namespace fast_planner
+}

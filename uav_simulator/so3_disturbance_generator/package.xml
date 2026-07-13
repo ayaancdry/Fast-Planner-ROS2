@@ -1,34 +1,28 @@
-<package>
-  <version>0.0.0</version>
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
   <name>so3_disturbance_generator</name>
-  <description>
-
-     so3_disturbance_generator
-
-  </description>
+  <version>0.0.0</version>
+  <description>so3_disturbance_generator</description>
 
   <maintainer email="eeshaojie@todo.todo">Shaojie Shen</maintainer>
   <license>BSD</license>
   <url>http://ros.org/wiki/so3_disturbance_generator</url>
 
-  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <build_depend>roscpp</build_depend>
-  <build_depend>std_msgs</build_depend>
-  <build_depend>nav_msgs</build_depend>
-  <build_depend>sensor_msgs</build_depend>
-  <build_depend>visualization_msgs</build_depend>
-  <build_depend>pose_utils</build_depend>
-  <build_depend>dynamic_reconfigure</build_depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>pose_utils</depend>
 
-  <run_depend>roscpp</run_depend>
-  <run_depend>std_msgs</run_depend>
-  <run_depend>nav_msgs</run_depend>
-  <run_depend>sensor_msgs</run_depend>
-  <run_depend>visualization_msgs</run_depend>
-  <run_depend>pose_utils</run_depend>
-  <run_depend>dynamic_reconfigure</run_depend>
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
 
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
 </package>
-
-

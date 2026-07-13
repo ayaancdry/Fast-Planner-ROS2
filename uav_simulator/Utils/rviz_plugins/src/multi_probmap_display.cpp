@@ -27,32 +27,31 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <boost/bind.hpp>
+#include <OgreManualObject.h>
+#include <OgreMaterialManager.h>
+#include <OgreSceneManager.h>
+#include <OgreSceneNode.h>
+#include <OgreTextureManager.h>
+#include <OgreTechnique.h>
+#include <OgrePass.h>
+#include <OgreTextureUnitState.h>
 
-#include <OGRE/OgreManualObject.h>
-#include <OGRE/OgreMaterialManager.h>
-#include <OGRE/OgreSceneManager.h>
-#include <OGRE/OgreSceneNode.h>
-#include <OGRE/OgreTextureManager.h>
+#include <tf2/utils.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
-#include <ros/ros.h>
-
-#include <tf/transform_listener.h>
-
-#include "rviz/frame_manager.h"
-#include "rviz/ogre_helpers/grid.h"
-#include "rviz/properties/float_property.h"
-#include "rviz/properties/int_property.h"
-#include "rviz/properties/property.h"
-#include "rviz/properties/quaternion_property.h"
-#include "rviz/properties/ros_topic_property.h"
-#include "rviz/properties/vector_property.h"
-#include "rviz/validate_floats.h"
-#include "rviz/display_context.h"
+#include "rviz_common/frame_manager_iface.hpp"
+#include "rviz_common/properties/float_property.hpp"
+#include "rviz_common/properties/int_property.hpp"
+#include "rviz_common/properties/property.hpp"
+#include "rviz_common/properties/quaternion_property.hpp"
+#include "rviz_common/properties/ros_topic_property.hpp"
+#include "rviz_common/properties/vector_property.hpp"
+#include "rviz_common/validate_floats.hpp"
+#include "rviz_common/display_context.hpp"
 
 #include "multi_probmap_display.h"
 
-namespace rviz
+namespace rviz_plugins
 {
 
 MultiProbMapDisplay::MultiProbMapDisplay()
@@ -60,12 +59,12 @@ MultiProbMapDisplay::MultiProbMapDisplay()
   , loaded_( false )
   , new_map_(false)
 {
-  topic_property_ = new RosTopicProperty( "Topic", "",
-                                          QString::fromStdString( ros::message_traits::datatype<multi_map_server::MultiOccupancyGrid>() ),
-                                          "multi_map_server::MultiOccupancyGrid topic to subscribe to.",
+  topic_property_ = new rviz_common::properties::RosTopicProperty( "Topic", "",
+                                          QString::fromStdString( "multi_map_server/msg/MultiOccupancyGrid" ),
+                                          "multi_map_server::msg::MultiOccupancyGrid topic to subscribe to.",
                                           this, SLOT( updateTopic() ));
 
-  draw_under_property_ = new Property( "Draw Behind", false,
+  draw_under_property_ = new rviz_common::properties::Property( "Draw Behind", false,
                                        "Rendering option, controls whether or not the map is always"
                                        " drawn behind everything else.",
                                        this, SLOT( updateDrawUnder() ));
@@ -79,6 +78,7 @@ MultiProbMapDisplay::~MultiProbMapDisplay()
 
 void MultiProbMapDisplay::onInitialize()
 {
+  topic_property_->initialize(context_->getRosNodeAbstraction());
 }
 
 void MultiProbMapDisplay::onEnable()
@@ -103,19 +103,22 @@ void MultiProbMapDisplay::subscribe()
   {
     try
     {
-      map_sub_ = update_nh_.subscribe( topic_property_->getTopicStd(), 1, &MultiProbMapDisplay::incomingMap, this );
-      setStatus( StatusProperty::Ok, "Topic", "OK" );
+      auto node = context_->getRosNodeAbstraction().lock()->get_raw_node();
+      map_sub_ = node->create_subscription<multi_map_server::msg::MultiOccupancyGrid>(
+          topic_property_->getTopicStd(), 1,
+          std::bind(&MultiProbMapDisplay::incomingMap, this, std::placeholders::_1));
+      setStatus( rviz_common::properties::StatusProperty::Ok, "Topic", "OK" );
     }
-    catch( ros::Exception& e )
+    catch( std::exception& e )
     {
-      setStatus( StatusProperty::Error, "Topic", QString( "Error subscribing: " ) + e.what() );
+      setStatus( rviz_common::properties::StatusProperty::Error, "Topic", QString( "Error subscribing: " ) + e.what() );
     }
   }
 }
 
 void MultiProbMapDisplay::unsubscribe()
 {
-  map_sub_.shutdown();
+  map_sub_.reset();
 }
 
 void MultiProbMapDisplay::updateDrawUnder()
@@ -143,18 +146,18 @@ void MultiProbMapDisplay::updateTopic()
 
 void MultiProbMapDisplay::clear()
 {
-  setStatus( StatusProperty::Warn, "Message", "No map received" );
+  setStatus( rviz_common::properties::StatusProperty::Warn, "Message", "No map received" );
 
   if( !loaded_ )
   {
     return;
   }
-  
+
   for (unsigned k = 0; k < manual_object_.size(); k++)
   {
     scene_manager_->destroyManualObject( manual_object_[k] );
     std::string tex_name = texture_[k]->getName();
-    texture_[k].setNull();
+    texture_[k].reset();
     Ogre::TextureManager::getSingleton().unload( tex_name );
   }
   manual_object_.clear();
@@ -167,33 +170,32 @@ void MultiProbMapDisplay::clear()
 // ***********************************************************************************************************************************
 
 void MultiProbMapDisplay::update( float wall_dt, float ros_dt )
-{  
+{
+  (void)wall_dt;
+  (void)ros_dt;
   {
-    boost::mutex::scoped_lock lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);
     current_map_ = updated_map_;
   }
 
   if (!new_map_)
     return;
-  new_map_ = false;  
+  new_map_ = false;
 
   clear();
-  
-  //ros::Time t[5];
-  //double dt[4] = {0,0,0,0};
+
   for (unsigned int k = 0; k < current_map_->maps.size(); k++)
   {
     if (current_map_->maps[k].data.empty())
-      continue;    
-    setStatus( StatusProperty::Ok, "Message", "Map received" );  
-    
+      continue;
+    setStatus( rviz_common::properties::StatusProperty::Ok, "Message", "Map received" );
+
     // Map info
-    float resolution = current_map_->maps[k].info.resolution;  
+    float resolution = current_map_->maps[k].info.resolution;
     int   width      = current_map_->maps[k].info.width;
-    int   height     = current_map_->maps[k].info.height;    
-    
+    int   height     = current_map_->maps[k].info.height;
+
     // Load pixel
-    //t[0] = ros::Time::now(); 
     unsigned int pixels_size = width * height;
     unsigned char* pixels = new unsigned char[pixels_size];
     memset(pixels, 255, pixels_size);
@@ -204,41 +206,32 @@ void MultiProbMapDisplay::update( float wall_dt, float ros_dt )
     for( unsigned int pixel_index = 0; pixel_index < num_pixels_to_copy; pixel_index++ )
     {
       unsigned char val;
-      int8_t data = current_map_->maps[k].data[ pixel_index ];     
+      int8_t data = current_map_->maps[k].data[ pixel_index ];
       if(data > 0)
         val = 255;
       else if(data < 0)
         val = 180;
       else
-        val = 0;                     
+        val = 0;
       pixels[ pixel_index ] = val;
     }
-/*        
-    int pixels_size = current_map_->maps[k].data.size();    
-    unsigned char* pixels = new unsigned char[pixels_size];
-    memcpy(pixels, &current_map_->maps[k].data[0], pixels_size);
-*/
     // Set texture
-    //t[1] = ros::Time::now();
     Ogre::DataStreamPtr pixel_stream;
     pixel_stream.bind( new Ogre::MemoryDataStream( pixels, pixels_size ));
     static int tex_count = 0;
     std::stringstream ss1;
     ss1 << "MultiMapTexture" << tex_count++;
     Ogre::TexturePtr _texture_;
-    //t[2] = ros::Time::now();            
     _texture_ = Ogre::TextureManager::getSingleton().loadRawData( ss1.str(), Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-                                                                  pixel_stream, width, height, Ogre::PF_L8, Ogre::TEX_TYPE_2D, 0);   
-    //t[3] = ros::Time::now();                                                                                                                                                                                   
-    texture_.push_back(_texture_);                                                
-    delete [] pixels;     
-    setStatus( StatusProperty::Ok, "Map", "Map OK" );      
-    //t[4] = ros::Time::now();     
-    
+                                                                  pixel_stream, width, height, Ogre::PF_L8, Ogre::TEX_TYPE_2D, 0);
+    texture_.push_back(_texture_);
+    delete [] pixels;
+    setStatus( rviz_common::properties::StatusProperty::Ok, "Map", "Map OK" );
+
     // Set material
     static int material_count = 0;
     std::stringstream ss0;
-    ss0 << "MultiMapObjectMaterial" << material_count++;  
+    ss0 << "MultiMapObjectMaterial" << material_count++;
     Ogre::MaterialPtr _material_;
     _material_ = Ogre::MaterialManager::getSingleton().create( ss0.str(),
                                                                Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME );
@@ -248,8 +241,8 @@ void MultiProbMapDisplay::update( float wall_dt, float ros_dt )
     _material_->setCullingMode( Ogre::CULL_NONE );
     _material_->setDepthWriteEnabled(false);
     material_.push_back(_material_);
-    material_.back()->setSceneBlending( Ogre::SBT_TRANSPARENT_COLOUR );      
-    material_.back()->setDepthWriteEnabled( false );    
+    material_.back()->setSceneBlending( Ogre::SBT_TRANSPARENT_COLOUR );
+    material_.back()->setDepthWriteEnabled( false );
     Ogre::Pass* pass = material_.back()->getTechnique(0)->getPass(0);
     Ogre::TextureUnitState* tex_unit = NULL;
     if (pass->getNumTextureUnitStates() > 0)
@@ -257,30 +250,31 @@ void MultiProbMapDisplay::update( float wall_dt, float ros_dt )
     else
       tex_unit = pass->createTextureUnitState();
     tex_unit->setTextureName(texture_.back()->getName());
-    tex_unit->setTextureFiltering( Ogre::TFO_NONE );                                                                             
-    
-    // Set manual object    
+    tex_unit->setTextureFiltering( Ogre::TFO_NONE );
+
+    // Set manual object
     static int map_count = 0;
     std::stringstream ss2;
     ss2 << "MultiMapObject" << map_count++;
     Ogre::ManualObject* _manual_object_ = scene_manager_->createManualObject( ss2.str() );
     manual_object_.push_back(_manual_object_);
-    scene_node_->attachObject( manual_object_.back() );    
-    float yo  = tf::getYaw(current_map_->origins[k].orientation);
+    scene_node_->attachObject( manual_object_.back() );
+    float yo  = tf2::getYaw(current_map_->origins[k].orientation);
     float co  = cos(yo);
     float so  = sin(yo);
     float dxo = current_map_->origins[k].position.x;
-    float dyo = current_map_->origins[k].position.y;     
-    float ym  = tf::getYaw(current_map_->maps[k].info.origin.orientation);
+    float dyo = current_map_->origins[k].position.y;
+    float ym  = tf2::getYaw(current_map_->maps[k].info.origin.orientation);
+    (void)ym;
     float dxm = current_map_->maps[k].info.origin.position.x;
-    float dym = current_map_->maps[k].info.origin.position.y;  
+    float dym = current_map_->maps[k].info.origin.position.y;
     float yaw = yo + ym;
     float c   = cos(yaw);
-    float s   = sin(yaw);    
+    float s   = sin(yaw);
     float dx  = co * dxm - so * dym + dxo;
     float dy  = so * dxm + co * dym + dyo;
     float x   = 0.0;
-    float y   = 0.0;    
+    float y   = 0.0;
     manual_object_.back()->begin(material_.back()->getName(), Ogre::RenderOperation::OT_TRIANGLE_LIST);
     {
       // First triangle
@@ -294,14 +288,14 @@ void MultiProbMapDisplay::update( float wall_dt, float ros_dt )
 
         // Top right
         x = c * resolution*width - s * resolution*height + dx;
-        y = s * resolution*width + c * resolution*height + dy;      
+        y = s * resolution*width + c * resolution*height + dy;
         manual_object_.back()->position( x, y, 0.0f );
         manual_object_.back()->textureCoord(1.0f, 1.0f);
         manual_object_.back()->normal( 0.0f, 0.0f, 1.0f );
 
         // Top left
         x = c * 0.0 - s * resolution*height + dx;
-        y = s * 0.0 + c * resolution*height + dy;        
+        y = s * 0.0 + c * resolution*height + dy;
         manual_object_.back()->position( x, y, 0.0f );
         manual_object_.back()->textureCoord(0.0f, 1.0f);
         manual_object_.back()->normal( 0.0f, 0.0f, 1.0f );
@@ -318,37 +312,33 @@ void MultiProbMapDisplay::update( float wall_dt, float ros_dt )
 
         // Bottom right
         x = c * resolution*width - s * 0.0 + dx;
-        y = s * resolution*width + c * 0.0 + dy;      
-        manual_object_.back()->position( x, y, 0.0f );      
+        y = s * resolution*width + c * 0.0 + dy;
+        manual_object_.back()->position( x, y, 0.0f );
         manual_object_.back()->textureCoord(1.0f, 0.0f);
         manual_object_.back()->normal( 0.0f, 0.0f, 1.0f );
 
         // Top right
         x = c * resolution*width - s * resolution*height + dx;
-        y = s * resolution*width + c * resolution*height + dy;      
+        y = s * resolution*width + c * resolution*height + dy;
         manual_object_.back()->position( x, y, 0.0f );
         manual_object_.back()->textureCoord(1.0f, 1.0f);
         manual_object_.back()->normal( 0.0f, 0.0f, 1.0f );
       }
     }
-    manual_object_.back()->end();  
+    manual_object_.back()->end();
     if( draw_under_property_->getValue().toBool() )
-      manual_object_.back()->setRenderQueueGroup(Ogre::RENDER_QUEUE_4);  
-      
-    //for (int i = 0; i < 4; i++)
-    //  dt[i] += (t[i+1] - t[i]).toSec();
+      manual_object_.back()->setRenderQueueGroup(Ogre::RENDER_QUEUE_4);
   }
-  loaded_ = true;  
-  context_->queueRender(); 
-  //ROS_ERROR("RVIZ MAP:  %f %f %f %f", dt[0],dt[1],dt[2],dt[3]);
+  loaded_ = true;
+  context_->queueRender();
 }
 
 // ***********************************************************************************************************************************
 
-void MultiProbMapDisplay::incomingMap(const multi_map_server::MultiOccupancyGrid::ConstPtr& msg)
+void MultiProbMapDisplay::incomingMap(const multi_map_server::msg::MultiOccupancyGrid::ConstSharedPtr msg)
 {
   updated_map_ = msg;
-  boost::mutex::scoped_lock lock(mutex_);
+  std::lock_guard<std::mutex> lock(mutex_);
   new_map_ = true;
 }
 
@@ -359,7 +349,7 @@ void MultiProbMapDisplay::reset()
   updateTopic();
 }
 
-} // namespace rviz
+} // namespace rviz_plugins
 
-#include <pluginlib/class_list_macros.h>
-PLUGINLIB_EXPORT_CLASS( rviz::MultiProbMapDisplay, rviz::Display )
+#include <pluginlib/class_list_macros.hpp>
+PLUGINLIB_EXPORT_CLASS( rviz_plugins::MultiProbMapDisplay, rviz_common::Display )

@@ -1,43 +1,86 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.5)
 project(traj_utils)
 
-set(CMAKE_CXX_STANDARD 14)
+# Default to C99
+if(NOT CMAKE_C_STANDARD)
+  set(CMAKE_C_STANDARD 99)
+endif()
 
-find_package(catkin REQUIRED COMPONENTS
-  bspline
-  bspline_opt
-  path_searching
-  poly_traj
-  roscpp
-  std_msgs
-  cv_bridge
-)
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
 
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# find dependencies
+find_package(ament_cmake REQUIRED)
+# uncomment the following section in order to fill in
+find_package(bspline REQUIRED)
+find_package(bspline_opt REQUIRED)
+find_package(path_searching REQUIRED)
+find_package(poly_traj REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclpy REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(PCL 1.7 REQUIRED)
-
-catkin_package(
- INCLUDE_DIRS include
- LIBRARIES traj_utils
- CATKIN_DEPENDS path_searching bspline bspline_opt poly_traj
-#  DEPENDS system_lib
-)
+find_package(plan_env REQUIRED)
+find_package(fast_planner REQUIRED)
 
 include_directories( 
-    SYSTEM 
     include 
-    ${catkin_INCLUDE_DIRS}
+    include/bspline
+    include/path_searching
+    include/plan_env
+    include/poly_traj
     ${Eigen3_INCLUDE_DIRS} 
     ${PCL_INCLUDE_DIRS}
+    ${bspline_INCLUDE_DIRS}
+    ${path_searching_INCLUDE_DIRS}
+    ${plan_env_INCLUDE_DIRS}
+    ${poly_traj_INCLUDE_DIRS}
 )
 
-link_directories(${PCL_LIBRARY_DIRS})
-
-set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS} -O3 -Wall")
-
-add_library( traj_utils
+add_library( traj_utils SHARED
     src/planning_visualization.cpp 
-    )
-target_link_libraries( traj_utils
-    ${catkin_LIBRARIES} 
-    )  
+  )
+
+ament_target_dependencies(traj_utils
+    rclcpp
+    rclpy
+    std_msgs
+    visualization_msgs
+    bspline
+    path_searching
+    plan_env
+    poly_traj
+    fast_planner
+  ) 
+
+target_link_libraries(traj_utils
+  ${PCL_LIBRARIES}
+)
+
+target_include_directories(traj_utils PUBLIC
+$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+$<INSTALL_INTERFACE:include>)
+
+
+install(DIRECTORY include/
+  DESTINATION include/)  
+
+install(TARGETS traj_utils
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
+ament_export_libraries(traj_utils)
+ament_export_include_directories(include)
+ament_package()

@@ -1,0 +1,52 @@
+<launch>
+  <!-- Simulator -->
+  <node pkg="so3_quadrotor_simulator" exec="quadrotor_simulator_so3" name="quadrotor_simulator_so3" output="screen">
+    <param name="rate.odom" value="100.0"/>
+
+    <param name="simulator.init_state_x" value="-5.0"/>
+    <param name="simulator.init_state_y" value="0.0"/>
+    <param name="simulator.init_state_z" value="3.0"/>
+
+    <remap from="odom" to="/visual_slam/odom"/>
+    <remap from="cmd" to="so3_cmd"/>
+    <remap from="imu" to="sim/imu"/>
+    <remap from="force_disturbance" to="force_disturbance"/>
+    <remap from="moment_disturbance" to="moment_disturbance"/>
+  </node>
+
+  <!-- Controller (composable node, standalone executable) -->
+  <node pkg="so3_control" exec="so3_control_node" name="so3_control" output="screen">
+    <remap from="odom" to="/state_ukf/odom"/>
+    <remap from="position_cmd" to="position_cmd"/>
+    <remap from="motors" to="motors"/>
+    <remap from="corrections" to="corrections"/>
+    <remap from="so3_cmd" to="so3_cmd"/>
+    <remap from="imu" to="sim/imu"/>
+    <param from="$(find-pkg-share so3_control)/config/gains_hummingbird.yaml"/>
+    <param from="$(find-pkg-share so3_control)/config/corrections_hummingbird.yaml"/>
+    <param name="mass" value="0.98"/>
+    <param name="use_external_yaw" value="false"/>
+    <param name="gains.rot.z" value="1.0"/>
+    <param name="gains.ang.z" value="0.1"/>
+  </node>
+
+  <node pkg="so3_disturbance_generator" exec="so3_disturbance_generator" name="so3_disturbance_generator" output="screen">
+    <remap from="odom" to="/visual_slam/odom"/>              <!-- Ground Truth & Fake VSLAM Odom -->
+    <remap from="noisy_odom" to="/state_ukf/odom"/>          <!-- Fake VINS Odom                 -->
+    <remap from="correction" to="/visual_slam/correction"/>  <!-- Fake VSLAM Correction          -->
+    <remap from="force_disturbance" to="force_disturbance"/>
+    <remap from="moment_disturbance" to="moment_disturbance"/>
+  </node>
+
+  <!-- Visualization -->
+  <node pkg="odom_visualization" exec="odom_visualization" name="odom_visualization_ukf" output="screen">
+    <remap from="odom" to="/visual_slam/odom"/>
+    <param name="color.a" value="0.8"/>
+    <param name="color.r" value="1.0"/>
+    <param name="color.g" value="0.0"/>
+    <param name="color.b" value="0.0"/>
+    <param name="covariance_scale" value="100.0"/>
+  </node>
+
+  <node pkg="rviz2" exec="rviz2" name="rviz" args="-d $(find-pkg-share so3_quadrotor_simulator)/config/rviz.rviz"/>
+</launch>

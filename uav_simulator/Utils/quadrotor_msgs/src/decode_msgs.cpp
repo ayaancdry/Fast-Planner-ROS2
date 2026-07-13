@@ -1,12 +1,13 @@
 #include "quadrotor_msgs/decode_msgs.h"
 #include <quadrotor_msgs/comm_types.h>
+#include <cstring>
 #include <Eigen/Geometry>
 
 namespace quadrotor_msgs
 {
 
 bool decodeOutputData(const std::vector<uint8_t> &data,
-                      quadrotor_msgs::OutputData &output)
+                      quadrotor_msgs::msg::OutputData &output)
 {
   struct OUTPUT_DATA output_data;
   if(data.size() != sizeof(output_data))
@@ -47,8 +48,6 @@ bool decodeOutputData(const std::vector<uint8_t> &data,
   {
     output.radio_channel[i] = output_data.radio[i];
   }
-  //for(int i = 0; i < 4; i++)
-  //  output.motor_rpm[i] = output_data.rpm[i];
 
   output.seq = output_data.seq;
 
@@ -56,7 +55,7 @@ bool decodeOutputData(const std::vector<uint8_t> &data,
 }
 
 bool decodeStatusData(const std::vector<uint8_t> &data,
-                      quadrotor_msgs::StatusData &status)
+                      quadrotor_msgs::msg::StatusData &status)
 {
   struct STATUS_DATA status_data;
   if(data.size() != sizeof(status_data))
@@ -71,7 +70,7 @@ bool decodeStatusData(const std::vector<uint8_t> &data,
 }
 
 bool decodePPROutputData(const std::vector<uint8_t> &data,
-                         quadrotor_msgs::PPROutputData &output)
+                         quadrotor_msgs::msg::PPROutputData &output)
 {
   struct PPR_OUTPUT_DATA output_data;
   if(data.size() != sizeof(output_data))

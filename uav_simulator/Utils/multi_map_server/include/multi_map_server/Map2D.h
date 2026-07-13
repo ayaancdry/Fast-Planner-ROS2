@@ -2,9 +2,9 @@
 #define MAP2D_H
 
 #include <iostream>
-#include <ros/ros.h>
-#include <tf/tf.h>
-#include <nav_msgs/OccupancyGrid.h>
+#include <rclcpp/rclcpp.hpp>
+#include <tf2/utils.h>
+#include <nav_msgs/msg/occupancy_grid.hpp>
 
 using namespace std;
 
@@ -12,31 +12,37 @@ class Map2D
 {
 
 private:
-  nav_msgs::OccupancyGrid map;
-  int  expandStep;  
-  int  binning;  
+  nav_msgs::msg::OccupancyGrid map;
+  int  expandStep;
+  int  binning;
   bool isBinningSet;
   bool updated;
 
 public:
-  Map2D() 
+  Map2D()
   {
-    map.data.resize(0); 
-    map.info.origin.orientation = tf::createQuaternionMsgFromYaw(0.0);  
-    expandStep   = 200; 
-    binning      = 1; 
-    isBinningSet = false; 
-    updated      = false; 
+    map.data.resize(0);
+    map.info.origin.orientation.x = 0.0;
+    map.info.origin.orientation.y = 0.0;
+    map.info.origin.orientation.z = 0.0;
+    map.info.origin.orientation.w = 1.0;
+    expandStep   = 200;
+    binning      = 1;
+    isBinningSet = false;
+    updated      = false;
   }
 
   Map2D(int _binning)
   {
-    map.data.resize(0); 
-    map.info.origin.orientation = tf::createQuaternionMsgFromYaw(0.0);  
-    expandStep   = 200; 
-    binning      = _binning; 
-    isBinningSet = true; 
-    updated      = false; 
+    map.data.resize(0);
+    map.info.origin.orientation.x = 0.0;
+    map.info.origin.orientation.y = 0.0;
+    map.info.origin.orientation.z = 0.0;
+    map.info.origin.orientation.w = 1.0;
+    expandStep   = 200;
+    binning      = _binning;
+    isBinningSet = true;
+    updated      = false;
   }
 
   ~Map2D() {}
@@ -46,27 +52,27 @@ public:
   double GetMinY() { return map.info.origin.position.y; }
   double GetMaxX() { return map.info.origin.position.x + map.info.width  * map.info.resolution; }
   double GetMaxY() { return map.info.origin.position.y + map.info.height * map.info.resolution; }
-  bool   Updated() { return updated; }  
-  void   Reset()   { map = nav_msgs::OccupancyGrid(); }
+  bool   Updated() { return updated; }
+  void   Reset()   { map = nav_msgs::msg::OccupancyGrid(); }
 
-  void SetBinning(int _binning) 
-  { 
+  void SetBinning(int _binning)
+  {
     if (!isBinningSet)
-      binning = _binning; 
+      binning = _binning;
   }
 
   // Get occupancy value, 0: unknown; +ve: occupied; -ve: free
-  signed char GetOccupiedFromWorldFrame(double x, double y) 
+  signed char GetOccupiedFromWorldFrame(double x, double y)
   {
     int xm = (x - map.info.origin.position.x) / map.info.resolution;
     int ym = (y - map.info.origin.position.y) / map.info.resolution;
-    if (xm < 0 || xm > map.info.width-1 || ym < 0 || ym > map.info.height-1) 
+    if (xm < 0 || xm > map.info.width-1 || ym < 0 || ym > map.info.height-1)
       return 0;
-    else 
+    else
       return map.data[ym*map.info.width+xm];
   }
 
-  void Replace(nav_msgs::OccupancyGrid m)
+  void Replace(nav_msgs::msg::OccupancyGrid m)
   {
     // Check data
     if (m.data.size() == 0)
@@ -104,7 +110,7 @@ public:
   }
 
   // Merge submap
-  void Update(nav_msgs::OccupancyGrid m)
+  void Update(nav_msgs::msg::OccupancyGrid m)
   {
     // Check data
     if (m.data.size() == 0)
@@ -144,7 +150,7 @@ public:
     // Get Info
     double ox   = m.info.origin.position.x;
     double oy   = m.info.origin.position.y;
-    double oyaw = tf::getYaw(m.info.origin.orientation);
+    double oyaw = tf2::getYaw(m.info.origin.orientation);
     double syaw = sin(oyaw);
     double cyaw = cos(oyaw);
     int mx      = m.info.width;
@@ -154,7 +160,7 @@ public:
     xs[0] = cyaw * (0)                      - syaw * (0)                      + ox;
     xs[1] = cyaw * (mx*map.info.resolution) - syaw * (0)                      + ox;
     xs[2] = cyaw * (0)                      - syaw * (mx*map.info.resolution) + ox;
-    xs[3] = cyaw * (mx*map.info.resolution) - syaw * (my*map.info.resolution) + ox;    
+    xs[3] = cyaw * (mx*map.info.resolution) - syaw * (my*map.info.resolution) + ox;
     ys[0] = syaw * (0)                      + cyaw * (0)                      + oy;
     ys[1] = syaw * (mx*map.info.resolution) + cyaw * (0)                      + oy;
     ys[2] = syaw * (0)                      + cyaw * (my*map.info.resolution) + oy;
@@ -222,17 +228,17 @@ public:
       {
         int xn = (cyaw*(x*map.info.resolution)-syaw*(y*map.info.resolution)+ox-map.info.origin.position.x) / map.info.resolution;
         int yn = (syaw*(x*map.info.resolution)+cyaw*(y*map.info.resolution)+oy-map.info.origin.position.y) / map.info.resolution;
-        if (abs((int)(map.data[yn*map.info.width+xn]) + (int)(m.data[y*mx+x])) <= 127)        
+        if (abs((int)(map.data[yn*map.info.width+xn]) + (int)(m.data[y*mx+x])) <= 127)
           map.data[yn*map.info.width+xn] += m.data[y*mx+x];
       }
     }
     updated = true;
   }
 
-  const nav_msgs::OccupancyGrid& GetMap()
+  const nav_msgs::msg::OccupancyGrid& GetMap()
   {
-    map.header.stamp       = ros::Time::now();
-    map.info.map_load_time = ros::Time::now();
+    map.header.stamp       = rclcpp::Clock().now();
+    map.info.map_load_time = rclcpp::Clock().now();
     map.header.frame_id    = string("/map");
     updated = false;
     return map;

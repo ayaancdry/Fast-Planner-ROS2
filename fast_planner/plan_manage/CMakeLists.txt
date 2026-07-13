@@ -1,70 +1,132 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.5)
 project(plan_manage)
 
-set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_CXX_FLAGS "-std=c++11")
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+# Default to C99
+if(NOT CMAKE_C_STANDARD)
+  set(CMAKE_C_STANDARD 99)
+endif()
 
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic )
+endif()
+
+# find dependencies
+find_package(ament_cmake REQUIRED)
+# uncomment the following section in order to fill in
+# further dependencies manually.
+# find_package(<dependency> REQUIRED)
+find_package(quadrotor_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(PCL 1.7 REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(bspline REQUIRED)
+find_package(bspline_opt REQUIRED)
+find_package(fast_planner REQUIRED)
+find_package(path_searching REQUIRED)
+find_package(traj_utils REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(poly_traj REQUIRED)
+find_package(plan_env REQUIRED)
+find_package(NLopt REQUIRED)
+if(TARGET NLopt::nlopt)
+  set(NLOPT_TARGET NLopt::nlopt)
+elseif(TARGET NLopt::nlopt_cxx)
+  set(NLOPT_TARGET NLopt::nlopt_cxx)
+else()
+  message(FATAL_ERROR "NLopt found but neither NLopt::nlopt nor NLopt::nlopt_cxx target exists")
+endif()
+find_package(builtin_interfaces REQUIRED)
 
-find_package(catkin REQUIRED COMPONENTS
-  roscpp
+include_directories(include
+  ${Eigen3_INCLUDE_DIRS} 
+  ${PCL_INCLUDE_DIRS}
+)  
+
+
+add_executable(fast_planner_node
+  src/planner_manager.cpp
+  src/kino_replan_fsm.cpp
+  src/topo_replan_fsm.cpp
+  src/fast_planner_node.cpp
+)
+
+ament_target_dependencies(fast_planner_node 
+  rclcpp
   std_msgs
-  geometry_msgs
-  quadrotor_msgs
+  nav_msgs
+  visualization_msgs
+  cv_bridge
+  poly_traj
   plan_env
   path_searching
   bspline
   bspline_opt
+  quadrotor_msgs
   traj_utils
-  message_generation
-  cv_bridge
+  fast_planner
+  builtin_interfaces
 )
 
-# Generate messages in the 'msg' folder
-add_message_files(
-  FILES
-  Bspline.msg
-  )
-  
-# Generate added messages and services with any dependencies listed here
-generate_messages(
-  DEPENDENCIES
+target_link_libraries(fast_planner_node
+  ${PCL_LIBRARIES}
+  ${Eigen3_LIBRARIES}
+  ${NLOPT_TARGET}
+)
+
+ ###########################################################
+add_executable(traj_server  
+  src/traj_server.cpp
+)
+
+ament_target_dependencies(traj_server 
+  rclcpp
   std_msgs
-  geometry_msgs
+  nav_msgs
+  visualization_msgs
+  cv_bridge
+  poly_traj
+  plan_env
+  path_searching
+  bspline
+  bspline_opt
+  quadrotor_msgs
+  traj_utils
+  fast_planner
+  builtin_interfaces
 )
 
-# catkin_package(CATKIN_DEPENDS message_runtime)
-catkin_package(
- INCLUDE_DIRS include
- LIBRARIES plan_manage
- CATKIN_DEPENDS plan_env path_searching bspline bspline_opt traj_utils message_runtime
-#  DEPENDS system_lib
-)
-
-include_directories(
-  include
-  SYSTEM
-  ${catkin_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/include
-  ${EIGEN3_INCLUDE_DIR}
-  ${PCL_INCLUDE_DIRS}
+target_link_libraries(traj_server
+  ${PCL_LIBRARIES}
+  ${Eigen3_LIBRARIES}
+  ${NLOPT_TARGET}
 )
 
 
-add_executable(fast_planner_node
-  src/fast_planner_node.cpp 
-  src/kino_replan_fsm.cpp
-  src/topo_replan_fsm.cpp
-  src/planner_manager.cpp
-  )
-target_link_libraries(fast_planner_node 
-  ${catkin_LIBRARIES}
-  )
+install(TARGETS fast_planner_node
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
 
-add_executable(traj_server src/traj_server.cpp)
-target_link_libraries(traj_server ${catkin_LIBRARIES})
-add_dependencies(traj_server ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
+install(TARGETS traj_server
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}/
+)
+install(DIRECTORY include/
+  DESTINATION include)          # this line works
+
+ament_export_include_directories(include)
+ament_export_libraries(plan_manage)
+ament_package()
 
