@@ -1,1 +1,1 @@
-This is a ROS2-HUmble port of the original Fast-Planner. 
+This is a ROS2-Humble port of the original Fast-Planner. 
